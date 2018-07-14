@@ -1,7 +1,8 @@
 /**
  * Author: theptrk
  * Download this file from: https://bit.ly/express-hello-world
-**/
+ */
+
 const express = require('express')
 const app = express()
 
