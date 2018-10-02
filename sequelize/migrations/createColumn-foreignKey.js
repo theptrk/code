@@ -11,10 +11,9 @@
  *           |-> TARGET (M)
  */
 
-// Step 1: `$ node_modules/.bin/sequelize migration:generate`
-// Step 2: name the new file `add-userid-to-task`
-// Step 3: copy this file into the new created file
-// Step 4: `$ node_modules/.bin/sequelize db:migrate`
+// Step 1: `$ node_modules/.bin/sequelize migration:generate --name add-userid-to-task`
+// Step 2: copy this file into the newly created file
+// Step 3: `$ node_modules/.bin/sequelize db:migrate`
 
 // === SET THESE ===
 // This is the name of your "source" model that is the (1) in the relationship
