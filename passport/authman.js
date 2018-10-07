@@ -5,9 +5,13 @@ const bcrypt = require('bcrypt');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 
+// used to generate random bytes
+const randomBytes = require('util').promisify(require('crypto').randomBytes);
+
 // TODO factor out `createUser` and `findUser` functions
 // This cannot be a seperate library until these features are abstracted
 const User = require('../db/models').User;
+const Op = require('sequelize').Op;
 
 // user is req.user 
 passport.serializeUser((user, done) => {
@@ -51,7 +55,6 @@ passport.use(
 
             return User.create({ email, password })
                 .then(user => done(null, user))
-                .catch(done)
         }).catch(done)
     })
 );
@@ -72,11 +75,11 @@ passport.use(
     }, (email, password, done) => {
         return User.find({ where: {email} }).then((user) => {
             if (!user) {
-                console.log('user doesnt exist')
+                // TODO flash
                 return done(null, false, { message: "user does not exist"});
             }
             if (!bcrypt.compareSync(password, user.password)) {
-                console.log('user and password combination is wrong')
+                // TODO flash 'user and password combination is wrong'
                 return done(null, false);
             }
             return done(null, user);
@@ -95,13 +98,68 @@ router.get('/logout', (req, res) => {
     return res.redirect('/');
 })
 
-// Step 4: Check authentication middleware
+// Step X: Check authentication middleware
 const isAuthenticated = (req, res, next) => 
     (req.isAuthenticated() ? next(): res.redirect('/'))
 
 // DELETE THIS or allow users to override this
 router.get('/profile', isAuthenticated, (req, res) => {
     return res.render('auth/profile', { email: req.user.email })
+})
+
+// Step X: Forgot password
+router.get('/forgotpassword', (req, res) => res.render('auth/forgotpassword'));
+router.post('/forgotpassword', (req, res) => 
+    User.find({ where: {email: req.body.email }})
+    .then(user => user ? user: Promise.reject('no user'))
+    .then(user => {
+        return randomBytes(48).then(random => [user, random.toString('hex')])
+    })
+    .then(([user, resetPasswordToken]) => {
+        user.resetPasswordExpiry = Date.now() + (60*60*1000); // 1 hour later
+        user.resetPasswordToken = resetPasswordToken;
+        user.save(); // we can ignore this promise
+        res.redirect('/forgotpassword')
+    })
+    .catch(err => {
+        // TODO flash message: error sending password reset
+        return res.redirect('/forgotpassword')
+    }))
+
+router.get('/resetpassword/:token', (req, res) => {
+    return User.find({ where: {
+        resetPasswordToken: req.params.token,
+        resetPasswordExpiry: {
+            // the saved date should be greater than right now
+            [Op.gte]: Date.now()
+        },
+    }})
+    .then((user) => user ? user: Promise.reject('no user'))
+    .then(user => res.render('auth/resetpassword'))
+    .catch(err => {
+        // TODO flash message: error sending password reset
+        return res.redirect('/forgotpassword')
+    })
+})
+router.post('/resetpassword/:token', (req, res) => {
+    return User.find({ where: {
+        resetPasswordToken: req.params.token,
+        resetPasswordExpiry: {
+            // the saved date should be greater than right now
+            [Op.gte]: Date.now()
+        }
+    }})
+    .then(user => user ? user: Promise.reject('no user'))
+    .then(user => {
+        user.password = req.body.password;
+        user.resetPasswordToken = null;
+        user.resetPasswordExpiry = null;
+        user.save().then(() => {
+            return res.redirect('/login');
+        })
+    })
+    // TODO flash
+    .catch(err => res.redirect('/forgotpassword'))
 })
 
 // we pass in app to be able to call `app.use`
@@ -112,3 +170,4 @@ const init = (app) => {
 }
 
 module.exports = init;
+
